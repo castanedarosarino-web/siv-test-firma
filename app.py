@@ -3,8 +3,9 @@ from streamlit_drawable_canvas import st_canvas
 from fpdf import FPDF
 from PIL import Image
 import io
+import tempfile
+import os
 from datetime import datetime
-import numpy as np
 
 st.set_page_config(page_title="S.I.V. - TEST DE FIRMA DIGITAL", layout="centered")
 
@@ -40,18 +41,23 @@ def generar_pdf_con_firma(nombre, dni, imagen_firma):
     pdf.ln(30)
     
     if imagen_firma is not None:
-        # CONVERSIÓN CORREGIDA PARA EVITAR EL ERROR 'RFIND'
+        # 1. Convertimos el dibujo a una imagen real
         img = Image.fromarray(imagen_firma.astype('uint8'), 'RGBA')
-        # La convertimos a RGB (fondo blanco) para que FPDF la lea más fácil
-        bg = Image.new("RGB", img.size, (255, 255, 255))
-        bg.paste(img, mask=img.split()[3]) 
         
-        img_buffer = io.BytesIO()
-        bg.save(img_buffer, format='JPEG')
-        img_buffer.seek(0)
+        # 2. Le ponemos fondo blanco (porque el canvas es transparente)
+        blanco = Image.new("RGB", img.size, (255, 255, 255))
+        blanco.paste(img, mask=img.split()[3]) 
         
-        # Guardamos temporalmente para que FPDF no busque el nombre del archivo
-        pdf.image(bg, x=75, y=pdf.get_y(), w=60)
+        # 3. Guardamos en un archivo temporal para que el PDF lo lea sin errores
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            blanco.save(tmp.name, format="JPEG")
+            ruta_temporal = tmp.name
+        
+        # 4. Insertamos la imagen usando la ruta del archivo temporal
+        pdf.image(ruta_temporal, x=75, y=pdf.get_y(), w=60)
+        
+        # 5. Borramos el archivo temporal para no ocupar espacio
+        os.unlink(ruta_temporal)
     
     pdf.ln(25)
     pdf.cell(0, 10, "------------------------------------------", ln=True, align="C")
@@ -69,7 +75,7 @@ if st.button("💾 GENERAR PDF DE PRUEBA"):
                 file_name=f"test_firma_{dni}.pdf",
                 mime="application/pdf"
             )
-            st.success("¡PDF generado correctamente!")
+            st.success("¡PDF generado con éxito!")
         except Exception as e:
             st.error(f"Error al generar PDF: {e}")
     else:
